@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Planning Poker</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+        ul {
+            list-style-type: none;
+            padding: 0;
+        }
+        li {
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Planning Poker</h1>
+    <div>
+        <label for="username">Username:</label>
+        <input type="text" id="username">
+        <button id="joinBtn">Join</button>
+    </div>
+    <div id="votingSection" style="display: none;">
+        <h2>Votes</h2>
+        <ul id="votesList"></ul>
+        <p id="average-value"></p>
+        <h2>Vote</h2>
+        <button data-vote="1">1</button>
+        <button data-vote="2">2</button>
+        <button data-vote="3">3</button>
+        <button data-vote="5">5</button>
+        <button data-vote="8">8</button>
+        <button data-vote="13">13</button>
+        <button data-vote="21">21</button>
+        <button data-vote="?">?</button>
+        <div>
+            <button id="averageBtn">Show Average</button>
+            <button id="resetBtn">Reset Votes</button>
+        </div>
+    </div>
+    <script>
+        const usernameInput = document.getElementById('username');
+        const joinBtn = document.getElementById('joinBtn');
+        const votingSection = document.getElementById('votingSection');
+        const votesList = document.getElementById('votesList');
+        const averageBtn = document.getElementById('averageBtn');
+        const resetBtn = document.getElementById('resetBtn');
+        const voteBtns = document.querySelectorAll('[data-vote]');
+
+        const ws = new WebSocket('ws://localhost:3000');
+
+        const votes = {};
+        let showVotes = false;
+        let users = [];
+        const currentUser = {
+            username: ''
+        };
+
+        const send = (type, data) => {
+            ws.send(JSON.stringify({ type, ...data }));
+        };
+
+        const on = (type, handler) => {
+            ws.addEventListener('message', (event) => {
+                const data = JSON.parse(event.data);
+                if (data.type === type) {
+                    handler(data);
+                }
+            });
+        };
+
+        joinBtn.addEventListener('click', () => {
+            const username = usernameInput.value;
+            if (username) {
+                currentUser.username = username;
+                send('join', { username });
+                votingSection.style.display = 'block';
+            }
+        });
+
+        voteBtns.forEach((btn) => {
+            btn.addEventListener('click', () => {
+                send('vote', { vote: btn.dataset.vote });
+            });
+        });
+
+        averageBtn.addEventListener('click', () => send('show_average'));
+        resetBtn.addEventListener('click', () => send('reset'));
+
+        on('users_list_updated', (data) => {
+            users = data.users;
+            listUsers();
+        });
+
+
+        on('votes_reset', () => {
+            showVotes = false;
+            document.getElementById('average-value').innerHTML = '';
+        });
+
+        on('average_vote', (data) => {
+            const averageValue = document.getElementById('average-value');
+            averageValue.textContent = `Average vote: ${data.average}`;
+            showVotes = true;
+            listUsers();
+        });
+
+        function renderUser(user) {
+            const username = user.username;
+            const listItem = document.createElement('li');
+            listItem.id = `user-${username}`;
+            listItem.dataset.username = username;
+            listItem.textContent = `${username}: `;
+            const voteSpan = document.createElement('span');
+            voteSpan.id = `vote-${username}`;
+            if (showVotes || username === currentUser.username) {
+                voteSpan.textContent = user.vote;
+            } else {
+                voteSpan.textContent = '';
+            }
+            listItem.appendChild(voteSpan);
+            votesList.appendChild(listItem);
+        }
+
+
+        function listUsers() {
+            // Clear the list
+            votesList.innerHTML = '';
+
+            // Re-render the list
+            users.forEach(renderUser);
+        }
+
+        function resetAllVotes() {
+            send('reset');
+        }
+
+    </script>
+</body>
+</html>
